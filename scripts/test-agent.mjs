@@ -1,0 +1,26 @@
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import {createRequire} from 'node:module';
+import ts from 'typescript';
+const dir=fs.mkdtempSync(path.join(os.tmpdir(),'shopagent-tests-'));
+for(const file of ['catalog','business','knowledge','agent']){fs.writeFileSync(path.join(dir,file+'.js'),ts.transpileModule(fs.readFileSync('lib/'+file+'.ts','utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText)}
+const require=createRequire(import.meta.url),{seed}=require(path.join(dir,'business.js')),{searchKnowledge,knowledge}=require(path.join(dir,'knowledge.js')),{runAgent,executeTool}=require(path.join(dir,'agent.js'));
+const v=seed();
+assert.ok(searchKnowledge(v,'拆封耳机可以退货吗').some(s=>s.id.startsWith('POL-RETURN')));
+assert.equal(searchKnowledge(v,'支持比特币付款吗').length,0);
+knowledge(v).unshift({id:'KB-TEST',title:'火星配送服务',text:'目前不提供火星配送，火星地区无法下单。',version:2,published:true});assert.ok(searchKnowledge(v,'火星配送').some(s=>s.id==='KB-TEST#1'));v.knowledge[0].published=false;assert.ok(!searchKnowledge(v,'火星配送').some(s=>s.id==='KB-TEST#1'));
+assert.throws(()=>executeTool(v,'search_products','{"maxPrice":-1}'));assert.throws(()=>executeTool(v,'compare_products','{"ids":["unknown"]}'));assert.ok(executeTool(v,'get_order','{"orderId":"NOT-OWNED"}').error);
+const products=executeTool(v,'search_products','{"maxPrice":500,"category":"audio","activeNoise":true}').products;assert.ok(products.length);assert.ok(products.every(p=>p.price<=500&&p.noise.includes('主动降噪')));
+assert.equal(executeTool(v,'request_handoff','{"reason":"test"}').handoff,true);assert.equal(v.tickets.length,0);
+const originalFetch=globalThis.fetch,oldKey=process.env.DEEPSEEK_API_KEY;delete process.env.DEEPSEEK_API_KEY;await assert.rejects(runAgent(v,'测试'),e=>e.code==='NOT_CONFIGURED');process.env.DEEPSEEK_API_KEY='unit-test-placeholder-not-a-real-key';let bodies=[];const turn=(message,finish_reason='stop')=>Response.json({choices:[{message,finish_reason}],usage:{prompt_tokens:10,completion_tokens:5}});
+globalThis.fetch=async(_url,init)=>{const body=JSON.parse(init.body);bodies.push(body);if(bodies.length===1)return turn({role:'assistant',content:null,tool_calls:[{id:'call1',type:'function',function:{name:'search_products',arguments:'{"maxPrice":500,"category":"audio","activeNoise":true}'}}]},'tool_calls');return turn({role:'assistant',content:JSON.stringify({answer:'为你推荐声屿 Quiet Pro。',productIds:['p1'],sourceIds:[]})})};
+v.messages=[{id:'history1',role:'user',text:'我的预算是500元，通勤用耳机'},{id:'history2',role:'assistant',text:'好的，请问更重视什么？'}];const answer=await runAgent(v,'更看重续航');assert.equal(answer.mode,'llm');assert.deepEqual(answer.productIds,['p1']);assert.equal(answer.tools[1].name,'search_products');assert.ok(bodies[0].messages.some(m=>m.content.includes('我的预算是500元')));assert.deepEqual(answer.usage,{input:20,output:10});assert.equal(bodies[0].thinking.type,'disabled');
+globalThis.fetch=async()=>turn({role:'assistant',content:JSON.stringify({answer:'编造商品',productIds:['invented'],sourceIds:[]})});await assert.rejects(runAgent(seed(),'耳机'),e=>e.code==='GROUNDING');
+globalThis.fetch=async()=>turn({role:'assistant',content:JSON.stringify({answer:'编造来源',productIds:[],sourceIds:['fake-source']})});await assert.rejects(runAgent(seed(),'耳机'),e=>e.code==='GROUNDING');
+let attempts=0;globalThis.fetch=async()=>{attempts++;return new Response('',{status:401})};await assert.rejects(runAgent(seed(),'测试'),e=>e.code==='UPSTREAM_401');assert.equal(attempts,1);
+attempts=0;globalThis.fetch=async()=>{attempts++;if(attempts===1)return new Response('',{status:429});return turn({role:'assistant',content:'{"answer":"请补充需求","productIds":[],"sourceIds":[]}'})};await runAgent(seed(),'测试');assert.equal(attempts,2);
+let calls=0;globalThis.fetch=async()=>{calls++;return turn({role:'assistant',content:null,tool_calls:[{id:'loop'+calls,type:'function',function:{name:'unknown',arguments:'{}'}}]},'tool_calls')};await assert.rejects(runAgent(seed(),'测试'),e=>e.code==='TOOL_LIMIT');assert.equal(calls,5);
+globalThis.fetch=originalFetch;if(oldKey===undefined)delete process.env.DEEPSEEK_API_KEY;else process.env.DEEPSEEK_API_KEY=oldKey;
+console.log('PASS: local retrieval, no hit, published/disabled knowledge, tool validation, visitor order boundary, handoff confirmation boundary, model request format, context, tool round trip, grounded product/source IDs, token usage, missing key, retry, auth error, loop limit. Provider responses mocked; this is NOT a live DeepSeek validation.');

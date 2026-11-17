@@ -1,0 +1,26 @@
+import assert from 'node:assert/strict';
+const base=process.env.SHOP_TEST_URL||'http://127.0.0.1:3000';
+function visitor(){let cookie='';return async(action,payload={},expected=200)=>{const r=await fetch(base+'/api/business',{method:action?'POST':'GET',headers:{Origin:base,...(cookie?{Cookie:cookie}:{}),...(action?{'Content-Type':'application/json'}:{})},body:action?JSON.stringify({action,...payload}):undefined});const set=r.headers.get('set-cookie');if(set)cookie=set.split(';')[0];assert.equal(r.status,expected,await r.clone().text());return r.json()}}
+const a=visitor(),b=visitor();
+const initial=await a();assert.equal(initial.orders.length,10);assert.equal(initial.tickets.length,0);assert.equal(initial.policies.length,3);
+const chat=await a('chat',{text:'帮我推荐500元以内适合通勤的降噪耳机'});const answer=chat.messages.at(-1);assert.ok(answer.productIds.length>0);assert.ok(!answer.productIds.includes('p6'));assert.match(answer.text,/500/);
+const noMatch=await a('chat',{text:'预算1元以内的耳机'});assert.equal(noMatch.messages.at(-1).productIds.length,0);
+await a('clear');assert.equal((await a()).messages.length,0);
+const combo=await a('chat',{text:'订单SA20261117001什么时候到，收到后能退货吗？'});assert.match(combo.messages.at(-1).text,/2026-11-18/);assert.deepEqual(combo.messages.at(-1).sources,['POL-RETURN-v1']);
+await a('lookup',{orderId:'NOT-EXIST'},400);
+const early=await a('advice',{orderId:'SA20261117001'});assert.match(early.advice,/尚未签收/);
+const opened=await a('advice',{orderId:'SA20261117002',opened:true});assert.match(opened.advice,/已拆封/);
+const expired=await a('advice',{orderId:'SA20261117003'});assert.match(expired.advice,/超过/);
+const quality=await a('advice',{orderId:'SA20261117002',opened:true,quality:true});assert.match(quality.advice,/人工核验/);
+await a('ticket',{description:'',kind:'人工咨询',key:'empty'},400);
+await a('ticket',{description:'测试',kind:'退货申请',orderId:'OTHER',key:'foreign'},400);
+const ticket=await a('ticket',{description:'自动化测试：耳机售后咨询',kind:'人工咨询',key:'test-ticket'});
+const again=await a('ticket',{description:'自动化测试：耳机售后咨询',kind:'人工咨询',key:'test-ticket'});assert.equal(ticket.ticket.id,again.ticket.id);assert.equal((await a()).tickets.length,1);
+await b();assert.equal((await b()).tickets.length,0);
+await b('process',{id:ticket.ticket.id,status:'已解决',note:'越权测试'},400);
+await a('process',{id:ticket.ticket.id,status:'已解决',note:''},400);
+await a('process',{id:ticket.ticket.id,status:'处理中',note:'已受理模拟售后问题'});
+await a('process',{id:ticket.ticket.id,status:'已解决',note:'测试处理完成'});assert.equal((await a()).tickets[0].status,'已解决');
+const messageId=combo.messages.at(-1).id;await a('feedback',{messageId,rating:'down',reason:'测试反馈'});await a('feedback',{messageId,rating:'up'});assert.equal((await a()).feedback.length,1);assert.equal((await a()).feedback[0].rating,'up');
+await b('feedback',{messageId,rating:'up'},400);
+console.log('PASS: recommendations, no match, combined order/policy query, returns rules, validation, persistence, deduplication, visitor isolation, ticket processing, feedback upsert.');

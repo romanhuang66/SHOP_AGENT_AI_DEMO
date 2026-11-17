@@ -1,0 +1,1 @@
+export async function business(action?:string,payload:Record<string,unknown>={}){const r=await fetch('/api/business',{method:action?'POST':'GET',headers:action?{'Content-Type':'application/json'}:undefined,body:action?JSON.stringify({action,...payload}):undefined,cache:'no-store'});const data=await r.json();if(!r.ok)throw new Error(data.error||'请求失败');return data}

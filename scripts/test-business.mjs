@@ -17,10 +17,9 @@ await a('ticket',{description:'测试',kind:'退货申请',orderId:'OTHER',key:'
 const ticket=await a('ticket',{description:'自动化测试：耳机售后咨询',kind:'人工咨询',key:'test-ticket'});
 const again=await a('ticket',{description:'自动化测试：耳机售后咨询',kind:'人工咨询',key:'test-ticket'});assert.equal(ticket.ticket.id,again.ticket.id);assert.equal((await a()).tickets.length,1);
 await b();assert.equal((await b()).tickets.length,0);
-await b('process',{id:ticket.ticket.id,status:'已解决',note:'越权测试'},400);
-await a('process',{id:ticket.ticket.id,status:'已解决',note:''},400);
-await a('process',{id:ticket.ticket.id,status:'处理中',note:'已受理模拟售后问题'});
-await a('process',{id:ticket.ticket.id,status:'已解决',note:'测试处理完成'});assert.equal((await a()).tickets[0].status,'已解决');
+await b('process',{id:ticket.ticket.id,status:'已解决',note:'越权测试'},401);
+await a('process',{id:ticket.ticket.id,status:'已解决',note:'消费者不能处理自己的工单'},401);
+assert.equal((await a()).tickets[0].status,'待处理');
 const messageId=combo.messages.at(-1).id;await a('feedback',{messageId,rating:'down',reason:'测试反馈'});await a('feedback',{messageId,rating:'up'});assert.equal((await a()).feedback.length,1);assert.equal((await a()).feedback[0].rating,'up');
 await b('feedback',{messageId,rating:'up'},400);
-console.log('PASS: recommendations, no match, combined order/policy query, returns rules, validation, persistence, deduplication, visitor isolation, ticket processing, feedback upsert.');
+console.log('PASS: recommendations, no match, combined order/policy query, returns rules, validation, persistence, deduplication, visitor isolation, admin-only ticket processing boundary, feedback upsert.');

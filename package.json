@@ -11,7 +11,9 @@
     "test:agent": "node scripts/test-agent.mjs",
     "check:secrets": "node scripts/check-secrets.mjs",
     "test:agent:live": "node scripts/test-agent-live.mjs",
-    "test:voice:live": "node scripts/test-voice-live.mjs"
+    "test:voice:live": "node scripts/test-voice-live.mjs",
+    "test:admin": "node scripts/test-admin.mjs",
+    "test:admin:live": "SHOP_LIVE=1 node scripts/test-admin.mjs"
   },
   "dependencies": {
     "next": "^16.0.0",

@@ -1,0 +1,17 @@
+'use client';
+import {useEffect,useRef,useState} from 'react';
+import {ShoppingBag,Minus,Plus,Trash2} from 'lucide-react';
+import {products,ProductArt} from './data';
+import {business} from '@/lib/client';
+import type {CartItem} from '@/lib/business';
+export function CartPanel({onShop,onPaid,onChange}:{onShop:()=>void;onPaid:(id:string)=>void;onChange:(count:number)=>void}){
+ const [items,setItems]=useState<CartItem[]>([]),[revision,setRevision]=useState(0),[loading,setLoading]=useState(true),[busy,setBusy]=useState(false),[error,setError]=useState('');
+ const paymentKey=useRef('');
+ function apply(d:{cart:CartItem[];cartRevision:number}){setItems(d.cart);setRevision(d.cartRevision);onChange(d.cart.reduce((n,i)=>n+i.quantity,0))}
+ async function load(){setLoading(true);setError('');try{apply(await business())}catch(e){setError((e as Error).message)}finally{setLoading(false)}}
+ useEffect(()=>{void load()},[]); // Refresh persisted cart whenever this page opens.
+ async function quantity(productId:string,value:number){setBusy(true);setError('');try{apply(await business('cart_set',{productId,quantity:value}));paymentKey.current=''}catch(e){setError((e as Error).message)}finally{setBusy(false)}}
+ async function pay(){setBusy(true);setError('');paymentKey.current||=crypto.randomUUID();try{const d=await business('checkout',{key:paymentKey.current,cartRevision:revision});onChange(0);onPaid(d.order.id)}catch(e){setError((e as Error).message)}finally{setBusy(false)}}
+ const total=items.reduce((sum,i)=>sum+(products.find(p=>p.id===i.productId)?.price||0)*i.quantity,0);
+ return <section className="inner-page cart-page"><span className="overline">YOUR EVERYDAY PICKS</span><h1>我的购物车<span>。</span></h1><p className="muted">确认商品后完成模拟下单支付，不会收取真实费用。支付成功后才会生成订单。</p>{error&&<div className="business-error" role="alert">{error} <button disabled={busy} onClick={load}>刷新购物车</button></div>}{loading?<p className="muted">正在读取购物车…</p>:!items.length?<div className="empty-state"><ShoppingBag size={36}/><h3>购物车还是空的</h3><p>先挑选喜欢的商品，点击「加入购物车」。</p><button className="primary-button" onClick={onShop}>去挑选商品</button></div>:<><div className="cart-items">{items.map(item=>{const p=products.find(p=>p.id===item.productId)!;return <article className="cart-item" key={p.id}><div className="cart-art" style={{background:p.bg}}><ProductArt product={p}/></div><div className="cart-description"><h3>{p.name}</h3><p className="muted">{p.category} · 模拟商品</p><strong>¥{p.price}</strong></div><div className="cart-quantity"><button aria-label={'减少'+p.name+'数量'} disabled={busy||item.quantity<=1} onClick={()=>quantity(p.id,item.quantity-1)}><Minus size={15}/></button><span aria-label={p.name+'数量'}>{item.quantity}</span><button aria-label={'增加'+p.name+'数量'} disabled={busy||item.quantity>=99} onClick={()=>quantity(p.id,item.quantity+1)}><Plus size={15}/></button></div><strong className="cart-subtotal">¥{p.price*item.quantity}</strong><button className="icon-btn" aria-label={'删除'+p.name} disabled={busy} onClick={()=>quantity(p.id,0)}><Trash2 size={17}/></button></article>})}</div><div className="cart-checkout"><div><span className="muted">共 {items.reduce((sum,i)=>sum+i.quantity,0)} 件商品</span><p>合计 <strong>¥{total}</strong></p><small className="muted">模拟支付 · 无真实扣款 · 无需填写支付信息</small></div><button className="primary-button" disabled={busy||loading} onClick={pay}><ShoppingBag size={17}/>{busy?'正在处理…':'下单支付（模拟）'}</button></div></>}<button className="text-button" onClick={onShop}>继续挑选商品</button></section>
+}

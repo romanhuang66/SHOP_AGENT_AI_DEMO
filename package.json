@@ -13,7 +13,14 @@
     "test:agent:live": "node scripts/test-agent-live.mjs",
     "test:voice:live": "node scripts/test-voice-live.mjs",
     "test:admin": "node scripts/test-admin.mjs",
-    "test:admin:live": "SHOP_LIVE=1 node scripts/test-admin.mjs"
+    "test:admin:live": "SHOP_LIVE=1 node scripts/test-admin.mjs",
+    "test:persistence": "node scripts/test-persistence.mjs",
+    "check:cloud": "node scripts/cloud-db.mjs",
+    "migrate:cloud": "node scripts/cloud-db.mjs --migrate-workspace",
+    "configure:vercel": "node scripts/configure-vercel-env.mjs",
+    "test:restart": "node scripts/test-restart.mjs",
+    "test:errors": "node scripts/test-errors.mjs",
+    "test:commerce": "node scripts/test-commerce.mjs"
   },
   "dependencies": {
     "next": "^16.0.0",
@@ -29,5 +36,8 @@
     "@types/react-dom": "^19.2.0",
     "tailwindcss": "^4.0.0",
     "@tailwindcss/postcss": "^4.0.0"
+  },
+  "engines": {
+    "node": ">=20.9.0"
   }
 }

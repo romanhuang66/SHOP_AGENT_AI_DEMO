@@ -1,0 +1,10 @@
+import assert from 'node:assert/strict';
+import fs from 'node:fs';import os from 'node:os';import path from 'node:path';import {createRequire} from 'node:module';import ts from 'typescript';
+const dir=fs.mkdtempSync(path.join(os.tmpdir(),'shopagent-commerce-'));
+for(const file of ['catalog','business','commerce'])fs.writeFileSync(path.join(dir,file+'.js'),ts.transpileModule(fs.readFileSync('lib/'+file+'.ts','utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText);
+const require=createRequire(import.meta.url),{seed,returnAdvice}=require(path.join(dir,'business.js')),{upgradeCommerce,changeCart,checkout}=require(path.join(dir,'commerce.js'));
+const legacy={orders:[{id:'SA20261117001'}],tickets:[],messages:[],feedback:[]};upgradeCommerce(legacy);assert.deepEqual(legacy.orders,[]);
+changeCart(legacy,'p1',2,true);const {order}=checkout(legacy,'unit-checkout-key',legacy.cartRevision,()=>crypto.randomUUID());upgradeCommerce(legacy);assert.equal(legacy.orders[0].id,order.id);assert.equal(order.total,798);assert.equal(checkout(legacy,'unit-checkout-key',0,()=>crypto.randomUUID()).order.id,order.id);
+assert.deepEqual(seed().orders,[]);const fixture={...order,productId:'p2',items:[{productId:'p2',name:'test',price:299,quantity:1}],deliveredDays:5,status:'已签收'};
+assert.match(returnAdvice(fixture,true,false),/已拆封/);assert.match(returnAdvice({...fixture,deliveredDays:20},false,false),/超过/);assert.match(returnAdvice(fixture,true,true),/人工核验/);assert.match(returnAdvice({...fixture,items:order.items},true,false),/初步符合/);
+console.log('PASS: legacy orders cleared once, new paid orders preserved, immutable order pricing and return-policy branches.');
